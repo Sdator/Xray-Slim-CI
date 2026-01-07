@@ -22,4 +22,4 @@ ENV XRAY_LOCATION_ASSET=/usr/bin
 USER nonroot:nonroot
 
 # 启动命令
-ENTRYPOINT ["/usr/bin/xray", "run", "-config", "/etc/xray/config.json"]
+ENTRYPOINT ["/usr/bin/xray", "run", "-config", "/etc/xray/config.jsonc"]
