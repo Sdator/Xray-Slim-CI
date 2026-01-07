@@ -3,48 +3,42 @@ name: Xray Docker Test
 on: [push, pull_request]
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
+    build-and-test:
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+        steps:
+            - name: 拉取本仓库
+              uses: actions/checkout@v4
 
-      # 1. 准备测试配置文件 (这里写一个最简单的 Socks5 代理配置)
-      - name: Prepare Xray Config
-        run: |
-          mkdir -p ./etc
-          echo '{
-            "inbounds": [{"port": 1080, "protocol": "socks", "settings": {"auth": "noauth"}}],
-            "outbounds": [{"protocol": "freedom"}]
-          }' > ./etc/config.json
+            - name: 构建镜像
+              run: |
+                  docker build -t xray-test:local .
 
-      # 2. 构建精简镜像 (基于我们之前讨论的 Distroless 或 Alpine)
-      - name: Build Xray Image
-        run: |
-          docker build -t xray-test:local .
+            - name: 运行容器
+              run: |
+                  docker run -d --name xray-server \
+                    -v $(pwd)/etc:/etc/xray \
+                    -p 1080:1080 \
+                    xray-test:local
 
-      # 3. 运行容器
-      - name: Run Xray Container
-        run: |
-          docker run -d --name xray-server \
-            -v $(pwd)/etc:/etc/xray \
-            -p 1080:1080 \
-            xray-test:local
+            - name: 测试访问 ifconfig.me 并打印 IP
+              run: |
+                  echo "等待 3 秒确保服务启动"
+                  sleep 3
 
-      # 4. 等待容器启动并进行健康检查
-      - name: Health Check & Test
-        run: |
-          # 等待 2 秒确保服务启动
-          sleep 2
+                  echo "打印容器日志"
+                  docker logs xray-server
 
-          # 检查容器日志是否有错误
-          docker logs xray-server
+                  echo "测试访问"
+                  PROXY_IP=$(curl -s -x socks5h://127.0.0.1:1080 https://ifconfig.me/)
+                  echo "当前IP为: $PROXY_IP"
 
-          # 使用 curl 通过 Xray 提供的 Socks5 代理访问 google (验证代理是否生效)
-          # -x 指定代理地址
-          curl -v -x socks5h://127.0.0.1:1080 https://www.google.com --connect-timeout 5
+                  # 验证返回内容是否不为空
+                  if [ -z "$PROXY_IP" ]; then
+                      echo "Test Failed: Could not get IP"
+                      exit 1
+                  fi
 
-      - name: Cleanup
-        if: always()
-        run: docker rm -f xray-server
+            - name: Cleanup
+              if: always()
+              run: docker rm -f xray-server
